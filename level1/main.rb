@@ -27,9 +27,13 @@ class LifenPayCalculator
   def calculate_pay(infos, shifts_grouped_by_worker)
     infos['workers'].map do |worker|
       worker_id = worker['id']
-      value = shifts_grouped_by_worker[worker_id].length * worker['price_per_shift']
-      { 'id': worker_id, 'price': value }
+      price = shifts_grouped_by_worker[worker_id].length * price_per_status(worker)
+      { 'id': worker_id, 'price': price }
     end
+  end
+
+  def price_per_status(worker)
+    worker['status'] == 'medic' ? 270 : 126
   end
 
   def store_data(filepath_output, result)
@@ -39,4 +43,25 @@ class LifenPayCalculator
   end
 end
 
-lifen_pay_calculator = LifenPayCalculator.new('data.json', 'output.json').calculate
+lifen_pay_calculator = LifenPayCalculator.new('../level2/data.json', '../level2/output.json').calculate
+
+# {
+#   "workers": [
+#     {
+#       "id": 1,
+#       "price": 810
+#     },
+#     {
+#       "id": 2,
+#       "price": 810
+#     },
+#     {
+#       "id": 3,
+#       "price": 252
+#     },
+#     {
+#       "id": 4,
+#       "price": 540
+#     }
+#   ]
+# }
