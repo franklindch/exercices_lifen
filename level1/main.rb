@@ -10,8 +10,9 @@ class LifenPayCalculator
   def calculate
     shifts_grouped_by_worker = group_shifts_per_worker(parse_data)
     smart_hash = calculate_pay(parse_data, shifts_grouped_by_worker)
-    workers = transform(smart_hash, shifts_grouped_by_worker)
-    store_data(workers, @filepath_output)
+    workers_key = transform(smart_hash, shifts_grouped_by_worker)
+    commission_key = calculate_commission_key(workers_key, interim_workers(parse_data))
+    store_data(workers_key, commission_key, @filepath_output)
   end
 
   private
@@ -58,7 +59,19 @@ class LifenPayCalculator
     end
   end
 
+  def calculate_commission_key(workers_key, number_of_interim_workers)
+    {
+      "pdg_fee": calculate_pdg_fee(workers_key, number_of_interim_workers),
+      "interim_shifts": number_of_interim_workers
+    }
+  end
+
+  def calculate_pdg_fee(workers_key, number_of_interim_workers)
+    (0.05 * (workers_key.map { |worker_result| worker_result[:price] }.reduce(0, :+))) + 80 * number_of_interim_workers
+  end
+
   def calculate_price(worker_details, shifts_grouped_by_worker)
+    return 480 * ((shifts_grouped_by_worker[worker_details[:id]]).length + 1) unless worker_details[:status] != 'interim'
     worker_details[:status] == 'medic' ? medic_price(worker_details) : intern_price(worker_details)
   end
 
@@ -70,11 +83,11 @@ class LifenPayCalculator
     126 * (worker_details[:weekend_day] * 2 + worker_details[:week_day])
   end
 
-  def store_data(workers, filepath_output)
+  def store_data(workers_key, commission_key, filepath_output)
     File.open(filepath_output, 'wb') do |file|
-      file.write(JSON.generate({"workers": workers}))
+      file.write(JSON.generate({"workers": workers_key, "commission": commission_key}))
     end
   end
 end
 
-LifenPayCalculator.new('../level3/data.json', '../level3/output.json').calculate
+LifenPayCalculator.new('../level4/data.json', '../level4/output.json').calculate
