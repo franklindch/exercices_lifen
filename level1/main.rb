@@ -1,4 +1,5 @@
-require "json"
+require 'json'
+require 'date'
 
 class LifenPayCalculator
   def initialize(filepath_input, filepath_output)
@@ -7,61 +8,73 @@ class LifenPayCalculator
   end
 
   def calculate
-    infos = parse_data(@filepath_input)
-    shifts_grouped_by_worker = group_shifts_per_worker(infos)
-    result = calculate_pay(infos, shifts_grouped_by_worker)
-    store_data(@filepath_output, result)
+    shifts_grouped_by_worker = group_shifts_per_worker(parse_data)
+    smart_hash = calculate_pay(parse_data, shifts_grouped_by_worker)
+    workers = transform(smart_hash, shifts_grouped_by_worker)
+    store_data(workers, @filepath_output)
   end
 
   private
 
-  def parse_data(filepath_input)
-    serialized_data = File.read(filepath_input)
+  def parse_data
+    serialized_data = File.read(@filepath_input)
     JSON.parse(serialized_data)
   end
 
+  def interim_workers(infos)
+    infos['shifts'].select { |shift| shift['user_id'] == 5 }.length
+  end
+
   def group_shifts_per_worker(infos)
-    infos['shifts'].group_by { |shift| shift['user_id'] }
+    infos['shifts'].select { |shift| !shift['user_id'].nil? }
+      .group_by { |shift| shift['user_id'] }
   end
 
   def calculate_pay(infos, shifts_grouped_by_worker)
     infos['workers'].map do |worker|
       worker_id = worker['id']
-      price = shifts_grouped_by_worker[worker_id].length * price_per_status(worker)
-      { 'id': worker_id, 'price': price }
+      worker_status = worker['status']
+      shifts_by_worker = shifts_grouped_by_worker[worker_id]
+      weekend_shifts = count_weekend_shifts(shifts_by_worker)
+      {
+        'id': worker_id,
+        'weekend_day': weekend_shifts,
+        'week_day': (shifts_by_worker.length - weekend_shifts),
+        'status': worker_status
+      }
     end
   end
 
-  def price_per_status(worker)
-    worker['status'] == 'medic' ? 270 : 126
+  def count_weekend_shifts(shifts_by_worker)
+    shifts_by_worker.select { |shift_by_worker| Date.parse(shift_by_worker['start_date']).wday == 0 || Date.parse(shift_by_worker['start_date']).wday == 6 }.length
   end
 
-  def store_data(filepath_output, result)
+  def transform(smart_hash, shifts_grouped_by_worker)
+    smart_hash.map do |worker_details|
+      {
+        'id': worker_details[:id],
+        'price': calculate_price(worker_details, shifts_grouped_by_worker)
+      }
+    end
+  end
+
+  def calculate_price(worker_details, shifts_grouped_by_worker)
+    worker_details[:status] == 'medic' ? medic_price(worker_details) : intern_price(worker_details)
+  end
+
+  def medic_price(worker_details)
+    270 * (worker_details[:weekend_day] * 2 + worker_details[:week_day])
+  end
+
+  def intern_price(worker_details)
+    126 * (worker_details[:weekend_day] * 2 + worker_details[:week_day])
+  end
+
+  def store_data(workers, filepath_output)
     File.open(filepath_output, 'wb') do |file|
-      file.write(JSON.generate({"workers": result}))
+      file.write(JSON.generate({"workers": workers}))
     end
   end
 end
 
-lifen_pay_calculator = LifenPayCalculator.new('../level2/data.json', '../level2/output.json').calculate
-
-# {
-#   "workers": [
-#     {
-#       "id": 1,
-#       "price": 810
-#     },
-#     {
-#       "id": 2,
-#       "price": 810
-#     },
-#     {
-#       "id": 3,
-#       "price": 252
-#     },
-#     {
-#       "id": 4,
-#       "price": 540
-#     }
-#   ]
-# }
+LifenPayCalculator.new('../level3/data.json', '../level3/output.json').calculate
